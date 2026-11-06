@@ -30,7 +30,7 @@ done
 for path in "$DATABASE_URL_SECRET_FILE" "$POSTGRES_PASSWORD_SECRET_FILE" \
   "$MINIO_ACCESS_KEY_SECRET_FILE" "$MINIO_SECRET_KEY_SECRET_FILE"; do
   [[ -f "$path" && -s "$path" ]] || fail "secret file missing or empty: $path"
-  mode=$(stat -f '%Lp' "$path" 2>/dev/null || stat -c '%a' "$path")
+  mode=$(stat -c '%a' "$path" 2>/dev/null || stat -f '%Lp' "$path")
   [[ "$mode" == "600" || "$mode" == "400" ]] || fail "secret file must be mode 0600/0400: $path"
 done
 
