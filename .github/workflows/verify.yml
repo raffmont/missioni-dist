@@ -8,7 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}
-      - uses: gitleaks/gitleaks-action@v2
       - run: python3 scripts/check_public_repo.py
       - run: git log -p --all | docker run --rm -i zricethezav/gitleaks:v8.24.2 detect --pipe --redact
   backend:
@@ -36,7 +35,7 @@ jobs:
       - run: npm run build
   accessibility:
     name: Accessibility WCAG 2.2 AA
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults: {run: {working-directory: frontend}}
     steps:
       - uses: actions/checkout@v4
