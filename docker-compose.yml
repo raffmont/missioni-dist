@@ -16,12 +16,18 @@ services:
     volumes: [minio_data:/bitnami/minio/data]
     networks: [private]
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg://missioni:local-synthetic-only@db:5432/missioni
       COOKIE_SECURE: "false"
       ALLOWED_ORIGINS: http://localhost:5173
-    depends_on: {db: {condition: service_healthy}}
+      OBJECT_STORE_ENDPOINT: http://minio:9000
+      OBJECT_STORE_ACCESS_KEY: localdemo
+      OBJECT_STORE_SECRET_KEY: local-synthetic-only
+      OBJECT_STORE_BUCKET: missioni-private
+    depends_on: {db: {condition: service_healthy}, minio: {condition: service_started}}
     networks: [private, public]
     read_only: true
     tmpfs: [/tmp]

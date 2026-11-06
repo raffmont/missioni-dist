@@ -1,0 +1,118 @@
+name: ${COMPOSE_PROJECT_NAME:-missioni-dist-production}
+
+x-security: &security
+  restart: unless-stopped
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  db:
+    image: postgres:17.4-alpine3.21
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: missioni
+      POSTGRES_USER: missioni
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U missioni -d missioni"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [data]
+    security_opt: [no-new-privileges:true]
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    <<: *security
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
+    secrets: [minio_access_key, minio_secret_key]
+    volumes:
+      - minio_data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [data]
+
+  app:
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable release tag or digest}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    <<: *security
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+      COOKIE_SECURE: "true"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:?Set trusted proxy IPs/CIDRs}
+      OBJECT_STORE_ENDPOINT: http://minio:9000
+      OBJECT_STORE_BUCKET: missioni-private
+      OBJECT_STORE_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      OBJECT_STORE_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      RETENTION_DAYS: ${RETENTION_DAYS:-365}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-15000000}
+      MAX_PDF_PAGES: ${MAX_PDF_PAGES:-30}
+      OPENAI_EXTRACTION_ENABLED: "false"
+      OPENAI_DATA_PROCESSING_AUTHORIZED: "false"
+    secrets: [database_url, minio_access_key, minio_secret_key]
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:8000"
+    depends_on:
+      db: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    networks: [ingress, data]
+
+  minio-tool:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    profiles: [tools]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        MC_HOST_source="http://$$(cat /run/secrets/minio_access_key):$$(cat /run/secrets/minio_secret_key)@minio:9000"
+        mc mirror --overwrite source/missioni-private /transfer
+    secrets: [minio_access_key, minio_secret_key]
+    networks: [data]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  ingress:
+  data:
+    internal: true
+
+secrets:
+  database_url:
+    file: ${DATABASE_URL_SECRET_FILE:?Set DATABASE_URL_SECRET_FILE}
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_SECRET_FILE:?Set POSTGRES_PASSWORD_SECRET_FILE}
+  minio_access_key:
+    file: ${MINIO_ACCESS_KEY_SECRET_FILE:?Set MINIO_ACCESS_KEY_SECRET_FILE}
+  minio_secret_key:
+    file: ${MINIO_SECRET_KEY_SECRET_FILE:?Set MINIO_SECRET_KEY_SECRET_FILE}

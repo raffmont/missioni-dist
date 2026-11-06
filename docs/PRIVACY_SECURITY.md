@@ -1,10 +1,12 @@
-# Privacy e sicurezza — Sprint A
+# Privacy e sicurezza — Sprint A e acquisizione Sprint C
 
 Questo documento descrive misure tecniche, non certifica conformità legale.
 
 ## Flussi e minimizzazione
 
 Il browser invia credenziali e dati missione all'API; l'API conserva record in PostgreSQL e documenti in storage privato. Nessun analytics, tracing esterno, OCR/AI cloud o email automatica. I log includono solo request-id, esito e route normalizzata: mai corpo, email, token o documenti.
+
+Sprint C salva originali con chiavi casuali nel bucket MinIO privato e consente lettura solo dopo controllo di proprietà. SHA-256, tipo rilevato e dimensione sono metadati separati. Estratti bancari e descrizioni non sono trasmessi a provider esterni. I flag OpenAI sono disabilitati per default e non esiste una chiamata cloud silenziosa.
 
 ## Matrice accessi
 
