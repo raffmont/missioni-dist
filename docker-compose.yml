@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: missioni
+      POSTGRES_USER: missioni
+      POSTGRES_PASSWORD: local-synthetic-only
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U missioni"], interval: 5s, timeout: 3s, retries: 10}
+    networks: [private]
+  minio:
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r0
+    environment:
+      MINIO_ROOT_USER: localdemo
+      MINIO_ROOT_PASSWORD: local-synthetic-only
+    volumes: [minio_data:/bitnami/minio/data]
+    networks: [private]
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://missioni:local-synthetic-only@db:5432/missioni
+      COOKIE_SECURE: "false"
+      ALLOWED_ORIGINS: http://localhost:5173
+    depends_on: {db: {condition: service_healthy}}
+    networks: [private, public]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+  frontend:
+    build: ./frontend
+    ports: ["5173:5173"]
+    depends_on: [backend]
+    networks: [public]
+    security_opt: [no-new-privileges:true]
+volumes: {postgres_data: {}, minio_data: {}}
+networks: {private: {internal: true}, public: {}}

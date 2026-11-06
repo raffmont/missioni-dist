@@ -1,0 +1,56 @@
+name: Verify Sprint A
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  security:
+    name: Security & privacy gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@v2
+      - run: python3 scripts/check_public_repo.py
+      - run: git log -p --all | docker run --rm -i zricethezav/gitleaks:v8.24.2 detect --pipe --redact
+  backend:
+    name: Backend quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0
+      - run: pip install './backend[dev]'
+      - run: ruff check backend
+      - run: pytest backend/tests
+  frontend:
+    name: Frontend quality
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: frontend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run lint
+      - run: npm run build
+  accessibility:
+    name: Accessibility WCAG 2.2 AA
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: frontend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build -d
+      - run: for i in {1..30}; do curl -fsS http://localhost:5173/health && exit 0; sleep 2; done; exit 1
+      - run: docker compose down -v
+        if: always()
