@@ -1,10 +1,13 @@
 import hashlib
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, select
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
 from .auth import current_user, new_session, ph, verify_password
@@ -34,6 +37,15 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-CSRF-Token"],
 )
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=[host.strip() for host in settings().allowed_hosts.split(",") if host.strip()],
+)
+
+# Imported after app construction to avoid coupling the Sprint C router to legacy routes.
+from .sprint_c import router as sprint_c_router  # noqa: E402
+
+app.include_router(sprint_c_router)
 
 
 @app.middleware("http")
@@ -46,9 +58,11 @@ async def security_headers(request, call_next):
             ),
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "no-referrer",
-            "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+            "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
         }
     )
+    if request.url.path.startswith("/api"):
+        response.headers["Cache-Control"] = "private, no-store"
     return response
 
 
@@ -64,6 +78,19 @@ async def problem(_, exc):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready(db: Session = Depends(get_db)):
+    """Readiness verifies dependencies without returning their details."""
+    try:
+        db.execute(text("SELECT 1"))
+        object_store = __import__("app.object_store", fromlist=["store"]).store()
+        if not object_store.local:
+            object_store.client.head_bucket(Bucket=object_store.bucket)
+    except Exception as exc:
+        raise HTTPException(503, "Dipendenze non disponibili") from exc
+    return {"status": "ready"}
 
 
 @app.post("/api/v1/auth/login", response_model=UserOut)
@@ -309,3 +336,10 @@ def protocol(
     db.add(AuditEvent(actor_id=user.id, mission_id=m.id, action="protocol.recorded"))
     db.commit()
     return m
+
+
+# The production image contains the built SPA. Mounting it here keeps one application
+# ingress and avoids introducing another reverse proxy in Docker Compose.
+static_dir = Path(__file__).resolve().parent / "static"
+if static_dir.is_dir():
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")

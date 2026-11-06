@@ -1,5 +1,9 @@
 # Verifica accessibilità Sprint A
 
+## Estensione Sprint C — 6 novembre 2026
+
+La UI di acquisizione usa input file nativo con alternativa alla fotocamera, messaggi `status`/`alert`, campi etichettati, controlli da 44 px, reflow a colonna e anteprima con testo alternativo. La riconciliazione usa select e conferma esplicita. Playwright/axe resta un controllo automatico parziale: Safari mobile/VoiceOver, NVDA e zoom su dispositivo reale sono attività manuali residue e non si dichiara conformità completa.
+
 Target progettuale: WCAG 2.2 AA, considerando EN 301 549 e normativa italiana applicabile. I test automatici non attestano conformità.
 
 ## Gate automatici

@@ -1,4 +1,4 @@
-name: Verify Sprint A
+name: Verify Sprint A and C
 on: [push, pull_request]
 permissions: {contents: read}
 jobs:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0
+      - run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 poppler-utils tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng
       - run: pip install './backend[dev]'
       - run: ruff check backend
       - run: pytest backend/tests

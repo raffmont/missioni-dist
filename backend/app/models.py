@@ -1,8 +1,20 @@
 import enum
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import (
+    JSON,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -119,3 +131,140 @@ class RetentionRun(Base):
     candidates: Mapped[int] = mapped_column(default=0)
     deleted: Mapped[int] = mapped_column(default=0)
     verification_hash: Mapped[str] = mapped_column(String(64), default="")
+
+
+class DocumentStatus(str, enum.Enum):
+    UPLOADING = "UPLOADING"
+    STORED = "STORED"
+    PROCESSING = "PROCESSING"
+    EXTRACTED = "EXTRACTED"
+    EXTRACTION_FAILED = "EXTRACTION_FAILED"
+
+
+class ExpenseStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    VERIFIED = "VERIFIED"
+    EXCLUDED = "EXCLUDED"
+
+
+class AllocationStatus(str, enum.Enum):
+    SUGGESTED = "SUGGESTED"
+    CONFIRMED = "CONFIRMED"
+    REVOKED = "REVOKED"
+
+
+class ReceiptDocument(Base):
+    __tablename__ = "receipt_documents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    mission_id: Mapped[str] = mapped_column(
+        ForeignKey("missions.id", ondelete="CASCADE"), index=True
+    )
+    expense_id: Mapped[str | None] = mapped_column(
+        ForeignKey("expenses.id", ondelete="SET NULL"), index=True
+    )
+    status: Mapped[DocumentStatus] = mapped_column(
+        Enum(DocumentStatus), default=DocumentStatus.UPLOADING
+    )
+    object_key: Mapped[str] = mapped_column(String(255), unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int] = mapped_column()
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    page_count: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        UniqueConstraint("owner_id", "mission_id", "sha256", name="uq_document_upload"),
+    )
+
+
+class Expense(Base):
+    __tablename__ = "expenses"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    mission_id: Mapped[str] = mapped_column(
+        ForeignKey("missions.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[ExpenseStatus] = mapped_column(Enum(ExpenseStatus), default=ExpenseStatus.DRAFT)
+    expense_date: Mapped[date | None] = mapped_column(Date)
+    merchant: Mapped[str | None] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(80))
+    document_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    personally_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    reimbursement_claimed: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    eur_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    conversion_criterion: Mapped[str | None] = mapped_column(String(240))
+    notes: Mapped[str | None] = mapped_column(Text)
+    confirmed_fields: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class DocumentExtraction(Base):
+    __tablename__ = "document_extractions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("receipt_documents.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(40))
+    provider_version: Mapped[str] = mapped_column(String(40))
+    raw_text: Mapped[str | None] = mapped_column(Text)
+    proposed_fields: Mapped[dict] = mapped_column(JSON)
+    confidences: Mapped[dict] = mapped_column(JSON)
+    provenance: Mapped[dict] = mapped_column(JSON)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class BankImport(Base):
+    __tablename__ = "bank_imports"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    mission_id: Mapped[str] = mapped_column(
+        ForeignKey("missions.id", ondelete="CASCADE"), index=True
+    )
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    institution: Mapped[str | None] = mapped_column(String(120))
+    account_reference_masked: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        UniqueConstraint("owner_id", "mission_id", "file_sha256", name="uq_bank_import"),
+    )
+
+
+class BankTransaction(Base):
+    __tablename__ = "bank_transactions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    import_id: Mapped[str] = mapped_column(
+        ForeignKey("bank_imports.id", ondelete="CASCADE"), index=True
+    )
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    operation_date: Mapped[date] = mapped_column(Date)
+    booking_date: Mapped[date | None] = mapped_column(Date)
+    full_description: Mapped[str] = mapped_column(Text)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    currency: Mapped[str] = mapped_column(String(3))
+    source_account: Mapped[str | None] = mapped_column(String(80))
+    external_reference: Mapped[str | None] = mapped_column(String(160))
+    selected: Mapped[bool] = mapped_column(default=False)
+
+
+class ExpenseAllocation(Base):
+    __tablename__ = "expense_allocations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    transaction_id: Mapped[str] = mapped_column(
+        ForeignKey("bank_transactions.id", ondelete="CASCADE"), index=True
+    )
+    expense_id: Mapped[str] = mapped_column(
+        ForeignKey("expenses.id", ondelete="CASCADE"), index=True
+    )
+    allocated_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    status: Mapped[AllocationStatus] = mapped_column(Enum(AllocationStatus))
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    rationale: Mapped[str | None] = mapped_column(String(240))
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

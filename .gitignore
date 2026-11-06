@@ -153,6 +153,7 @@ activemq-data/
 *.tsbuildinfo
 .env*
 !.env.example
+!.env.production.example
 .envrc
 .venv
 env/
@@ -208,6 +209,8 @@ storage/
 private/
 data/
 backups/
+ops/production/secrets/
+ops/production/backup-output/
 *.sql
 *.sqlite
 *.sqlite3

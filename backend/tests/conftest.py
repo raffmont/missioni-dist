@@ -1,7 +1,9 @@
 import os
+import tempfile
 
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 os.environ["COOKIE_SECURE"] = "false"
+os.environ["LOCAL_STORAGE_PATH"] = tempfile.mkdtemp(prefix="missioni-dist-tests-")
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

@@ -1,0 +1,28 @@
+name: Production deployment checks
+on: [push, pull_request]
+permissions: {contents: read}
+
+jobs:
+  compose-and-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create synthetic config inputs
+        run: |
+          install -m 700 -d "$RUNNER_TEMP/missioni-secrets"
+          printf '%s' 'synthetic-only' > "$RUNNER_TEMP/missioni-secrets/postgres_password"
+          printf '%s' 'postgresql+psycopg://missioni:synthetic-only@db:5432/missioni' > "$RUNNER_TEMP/missioni-secrets/database_url"
+          printf '%s' 'synthetic-access' > "$RUNNER_TEMP/missioni-secrets/minio_access_key"
+          printf '%s' 'synthetic-secret-at-least-eight' > "$RUNNER_TEMP/missioni-secrets/minio_secret_key"
+          chmod 600 "$RUNNER_TEMP/missioni-secrets/"*
+          cp .env.production.example "$RUNNER_TEMP/production.env"
+          sed -i 's/CHANGE_ME_RELEASE/ci/' "$RUNNER_TEMP/production.env"
+          sed -i 's/CHANGE_ME.uniparthenope.it/missioni.example.org/g' "$RUNNER_TEMP/production.env"
+          sed -i 's/CHANGE_ME_PROXY_IP_OR_CIDR/127.0.0.1/' "$RUNNER_TEMP/production.env"
+          sed -i "s|/etc/missioni-dist/secrets|$RUNNER_TEMP/missioni-secrets|g" "$RUNNER_TEMP/production.env"
+          printf '%s\n' 'BACKUP_AGE_RECIPIENTS_FILE=/dev/null' >> "$RUNNER_TEMP/production.env"
+          chmod 600 "$RUNNER_TEMP/production.env"
+      - run: ops/production/preflight.sh "$RUNNER_TEMP/production.env"
+      - run: docker compose --env-file "$RUNNER_TEMP/production.env" -f compose.production.yml config --format json | python3 scripts/check_production_compose.py
+      - run: docker compose --env-file "$RUNNER_TEMP/production.env" -f compose.production.yml build app
+      - run: docker run --rm missioni-dist:ci id -u | grep -Ev '^0$'
