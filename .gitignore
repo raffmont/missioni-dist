@@ -149,8 +149,10 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
-# Environments
-.env
+# Public repository safety: secrets and private/generated material
+*.tsbuildinfo
+.env*
+!.env.example
 .envrc
 .venv
 env/
@@ -188,7 +190,42 @@ cython_debug/
 #   be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #   and can be added to the global gitignore or merged into this file.  For a more nuclear
 #   option (not recommended) you can uncomment the following to ignore the entire idea folder.
-# .idea/
+.idea/
+
+# Credentials, private keys and local auth state
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+credentials*
+secrets*
+!.github/workflows/secret-and-pii.yml
+
+# Private or generated data (never commit real documents)
+uploads/
+storage/
+private/
+data/
+backups/
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.pdf
+*.docx
+*.xlsx
+*.xls
+generated/
+artifacts/
+playwright-report/
+test-results/
+
+# JavaScript
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.playwright/
 
 # Abstra
 #   Abstra is an AI-powered process automation framework.

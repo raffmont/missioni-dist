@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: synthetic-data-only
+        name: Synthetic data and PII guard
+        entry: python3 scripts/check_public_repo.py
+        language: system
+        pass_filenames: false

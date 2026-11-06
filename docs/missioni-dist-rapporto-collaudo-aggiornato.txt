@@ -1,0 +1,156 @@
+MISSIONI DIST — RAPPORTO DI COLLAUDO AGGIORNATO
+Data: 6 novembre 2026, ore 19:00 Europe/Rome
+Ambiente: locale Docker Compose, http://localhost:5173
+Baseline Git: 929f02bc1704fbb5d1d88da1565d2af9b52cae54, con modifiche di Sprint A non ancora committate
+Esito: ENV-01 RISOLTO; SPRINT A SUPERA I CONTROLLI AUTOMATIZZATI. CHIUSURA COMPLETA ANCORA SUBORDINATA ALLE VERIFICHE MANUALI E ALLE CONFERME ISTITUZIONALI INDICATE AL §8.
+
+1. Perimetro e metodo
+
+Il collaudo è stato eseguito nello stesso ambiente locale in cui gira missioni-dist, usando esclusivamente identità, missioni, date e documenti sintetici. Non sono state inviate email, simulate firme o approvazioni, né modificate le responsabilità del workflow amministrativo.
+
+Sono stati verificati prima il percorso Sprint A e poi i servizi aggiuntivi effettivamente presenti. Le funzioni F04–F11 del precedente rapporto non sono state trattate come difetti: anticipo, spese, import bancario, fascicoli e saldo non appartengono alla versione implementata.
+
+Container osservati attivi:
+- missioni-dist-frontend-1, porta pubblica 5173;
+- missioni-dist-backend-1, raggiungibile soltanto dalla rete Docker;
+- missioni-dist-db-1, PostgreSQL con health check positivo;
+- missioni-dist-minio-1, non esposto pubblicamente.
+
+Evidenza ENV-01:
+- GET http://localhost:5173/health -> 200, {"status":"ok"};
+- il runner Playwright locale ha aperto il login, autenticato il richiedente sintetico e completato il percorso applicativo;
+- Docker Compose mostra i quattro servizi attivi e il database healthy.
+
+2. Verifica Sprint A
+
+F01 — Login, creazione e persistenza: SUPERATO.
+È stata creata una missione con identificatore sintetico univoco, poi ritrovata dopo ricaricamento completo della pagina. I test API confermano isolamento tra due richiedenti e diniego dell'accesso per identificatore sostituito.
+
+F02 — Autorizzazione: SUPERATO PER LE FUNZIONI IMPLEMENTATE.
+Generazione e download PDF e DOCX completati dal browser reale. Il PDF contiene lingua, titolo, metadati e struttura di lettura verificata dai test. La firma resta esterna al sistema e non viene simulata. Eventuali regole istituzionali sulla firma del responsabile del fondo restano da confermare.
+
+F03 — Protocollo: SUPERATO PER LE FUNZIONI IMPLEMENTATE.
+Numero e data inseriti manualmente dopo il render portano la missione allo stato AUTHORIZED. Una chiamata diretta prima del render è respinta. La funzione di anticipo non è implementata e quindi non è stata dichiarata verificata.
+
+F04–F11 — NON IMPLEMENTATE / NON APPLICABILI A SPRINT A.
+Nessun esito di conformità è attribuito a queste funzioni.
+
+Percorso browser reale eseguito:
+login -> nuova missione -> ricarica/persistenza -> PDF -> DOCX -> protocollo.
+Risultato Playwright locale: 1 test superato su 1.
+
+3. Difetto realmente riscontrato e corretto
+
+FUN-01 — Token CSRF perso al ricaricamento della pagina
+Priorità: P1.
+Prerequisiti: richiedente sintetico autenticato, missione sintetica salvata.
+Passi: ricaricare la pagina e richiedere la generazione dell'autorizzazione.
+Atteso: la sessione persistente consente l'operazione con protezione CSRF valida.
+Osservato prima della correzione: POST /authorization/render -> 403. La sessione HttpOnly sopravviveva, mentre il token CSRF esisteva soltanto nella memoria JavaScript cancellata dal reload.
+Causa: ciclo di vita del token CSRF non allineato a quello della sessione.
+Correzione: il login imposta un cookie CSRF dedicato, non HttpOnly, SameSite=Strict, con Secure governato dall'ambiente; il frontend lo usa dopo il reload. Il cookie di sessione resta HttpOnly e SameSite=Strict. Il logout elimina entrambi.
+Regressione: test API test_csrf_cookie_survives_frontend_reload e percorso Playwright reale; entrambi superati.
+
+Un successivo arresto del test su una corrispondenza testuale esatta è stato classificato come difetto del test, non del prodotto: lo stato AUTHORIZATION_READY era presente e l'API aveva restituito 200. Il selettore è stato reso coerente con il contenuto effettivo.
+
+4. Accessibilità WCAG 2.2 AA
+
+Controlli automatizzati SUPERATI nell'ambito implementato:
+- axe-core sulla pagina di login a 320 CSS px;
+- axe-core sul flusso principale autenticato;
+- axe-core sullo stato reale dopo login e dopo autorizzazione;
+- build semantica con lingua italiana e test del reflow;
+- 2 test Playwright/axe isolati superati su 2;
+- 1 percorso Playwright contro i container reali superato su 1.
+
+PDF generato:
+- controllo PDF/UA con veraPDF: conforme, 106 regole e 1.246 controlli, 0 errori;
+- test automatici su lingua, titolo, testo e ordine logico superati.
+
+Limiti che impediscono una dichiarazione completa di conformità:
+- VoiceOver/Safari e NVDA/browser compatibile non sono stati verificati manualmente in questa sessione;
+- PAC non è disponibile nell'ambiente macOS e il controllo manuale dei tag/ordine di lettura con PAC resta aperto;
+- i test automatici non sostituiscono tastiera, screen reader, contrasto percettivo e ispezione manuale del PDF.
+
+5. Sicurezza e privacy
+
+Controlli SUPERATI:
+- 12 test backend su 12: health/security header, Argon2id, cookie, CSRF, CORS, date non valide, ruoli in sola lettura, isolamento oggetti, vincoli protocollo, rate limiting persistente, export/cancellazione, reset credenziali amministrato e retention;
+- cookie di sessione HttpOnly e SameSite=Strict; cookie CSRF SameSite=Strict;
+- Content-Security-Policy e X-Content-Type-Options verificati;
+- origine CORS non attendibile respinta;
+- richiedente diverso respinto senza contenuto della missione;
+- ruoli PROTOCOL_OFFICER e MISSIONS_OFFICER non possono creare missioni;
+- rate limiting memorizzato nel database, quindi non limitato alla memoria del processo;
+- export account, cancellazione e job di retention in dry-run/esecuzione con conteggi verificabili;
+- reset credenziali riservato all'amministratore e invalidazione della password precedente;
+- npm audit --audit-level=moderate: 0 vulnerabilità;
+- Ruff, ESLint, TypeScript e build Vite: superati;
+- scansione Gitleaks dell'intera cronologia Git: nessun segreto rilevato;
+- controllo repository pubblico: superato, fixture e configurazioni contengono soltanto dati sintetici;
+- git diff --check: superato.
+
+Limiti:
+- HTTPS, attributo Secure effettivo e terminazione TLS devono essere verificati nel deployment di produzione; l'HTTP locale non costituisce una prova negativa;
+- upload, OCR, import bancario e relativi controlli MIME/quarantena non sono implementati;
+- MinIO è isolato dalla rete pubblica, ma il suo uso applicativo, le URL firmate e un restore di backup non appartengono a Sprint A e non sono stati collaudati;
+- la conformità GDPR non deriva dai soli test tecnici.
+
+6. Comandi ed esiti di regressione
+
+- docker compose ps -> quattro servizi attivi; PostgreSQL healthy.
+- curl -fsS http://localhost:5173/health -> {"status":"ok"}.
+- DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib .venv/bin/ruff check backend -> superato.
+- DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib .venv/bin/pytest -q -> 12 superati, 1 warning di deprecazione Starlette/AnyIO.
+- npm run lint --prefix frontend -> superato.
+- npm run build --prefix frontend -> superato.
+- npm run test:e2e --prefix frontend -> 2 superati.
+- npm run test:local --prefix frontend -> 1 superato.
+- npm audit --prefix frontend --audit-level=moderate -> 0 vulnerabilità.
+- python3 scripts/check_public_repo.py -> superato.
+- Gitleaks v8.24.2 sulla cronologia completa -> nessuna fuga rilevata.
+- git diff --check -> superato.
+
+7. Questioni aperte e condizione di chiusura
+
+Restano decisioni dell'Ateneo/DPO, non sostituibili da assunzioni tecniche:
+- accettazione del prospetto bancario derivato;
+- validazione della prassi di restituzione entro 15 giorni;
+- firme richieste e soggetti firmatari;
+- accettazione/formato dei PDF;
+- tempi di conservazione e criteri di cancellazione;
+- base giuridica, ruoli privacy, informativa e necessità di DPIA.
+
+Per chiudere integralmente lo Sprint A occorrono inoltre evidenze manuali VoiceOver e NVDA e verifica PAC del PDF. Fino a tali prove e conferme, l'esito corretto è: implementazione Sprint A verificata dai controlli automatizzati, ma conformità complessiva non ancora certificata.
+
+Conclusione: ENV-01 è risolto. È stato confermato e corretto un difetto applicativo P1 (FUN-01); tutti i test automatizzati funzionali, di regressione, sicurezza/privacy e accessibilità applicabili alla versione implementata risultano superati. Le funzioni successive a Sprint A e le verifiche manuali/istituzionali restano esplicitamente fuori dall'esito positivo.
+
+APPENDICE — REGRESSIONE SPRINT A 0.2.0
+Data: 6 novembre 2026, ore 19:12 Europe/Rome
+
+Perimetro: mezzi di trasporto multipli e periodo missione espresso con sole date. Nessuna procedura amministrativa è stata modificata e non è stato avviato Sprint B.
+
+Modifiche verificate:
+- selezione simultanea tra Aereo, Treno, Auto a noleggio, Auto personale e Auto dipartimentale;
+- nessun modulo o dichiarazione aggiuntiva per Auto personale;
+- `planned_start` e `planned_end` di tipo PostgreSQL DATE e formato API `date`, senza orario o conversione di fuso nel frontend;
+- PDF e DOCX con tutti i mezzi e date nel formato gg/mm/aaaa;
+- compatibilità API tramite `transport_mode` deprecato, accettato in input e restituito come primo mezzo;
+- checkbox native raggruppate da `fieldset` e `legend`, utilizzabili con Tab e Spazio.
+
+Evidenza migrazione su dati sintetici preesistenti:
+- prima di `0003`: 4 missioni;
+- dopo `0003`: 4 missioni, 4 valori `transport_modes` valorizzati, nessuna cancellazione;
+- versione Alembic: `0003`;
+- tipi `planned_start` e `planned_end`: `date`;
+- intervallo preservato: 2027-03-10 / 2027-03-12.
+
+Regressione:
+- Ruff: superato;
+- pytest: 15/15 superati, inclusa la verifica OpenAPI, con un warning di deprecazione Starlette/AnyIO non bloccante;
+- ESLint e build TypeScript/Vite: superati;
+- Playwright/axe: 2/2 superati;
+- Playwright contro i container reali: 1/1 superato;
+- migrazione PostgreSQL e conservazione record: superate.
+
+Esito appendice: modifica Sprint A superata dai controlli automatizzati. Restano invariati i limiti già documentati per VoiceOver, NVDA, PAC e conferme Ateneo/DPO.
