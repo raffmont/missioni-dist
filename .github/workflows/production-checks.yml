@@ -6,7 +6,7 @@ jobs:
   compose-and-container:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Create synthetic config inputs
         run: |
           install -m 700 -d "$RUNNER_TEMP/missioni-secrets"
