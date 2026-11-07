@@ -45,6 +45,8 @@ docker run --rm --read-only --tmpfs /tmp -v "$PWD/backend/tests:/bench:ro" missi
 
 Policy e limitazioni: `docs/PUBLIC_REPO_POLICY.md`, `docs/PRIVACY_SECURITY.md`, `docs/OPEN_QUESTIONS.md`.
 
+Procedura operativa illustrata: [`docs/GUIDA_UTENTE.md`](docs/GUIDA_UTENTE.md).
+
 ## Deployment istituzionale (preparazione, non go-live)
 
 Gli artefatti per Docker Compose su server Uniparthenope sono in `compose.production.yml` e `ops/production/`. La produzione usa un solo ingresso applicativo: FastAPI serve anche il bundle frontend e resta dietro il reverse proxy HTTPS istituzionale; PostgreSQL e MinIO non pubblicano porte. Migrazioni, backup cifrato e deploy sono fasi manuali esplicite e non caricano dati demo.
