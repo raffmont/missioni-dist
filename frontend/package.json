@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {"dev": "vite --host 0.0.0.0", "build": "tsc -b && vite build", "lint": "eslint .", "test:e2e": "playwright test", "test:local": "playwright test --config playwright.local.config.ts"},
-  "dependencies": {"@vitejs/plugin-react": "5.1.0", "react": "19.2.0", "react-dom": "19.2.0", "typescript": "5.9.3", "vite": "7.3.7"},
-  "devDependencies": {"@axe-core/playwright": "4.11.0", "@eslint/js": "9.39.1", "@playwright/test": "1.56.1", "@types/react": "19.2.2", "@types/react-dom": "19.2.2", "eslint": "9.39.1", "eslint-plugin-jsx-a11y": "6.10.2", "typescript-eslint": "8.46.3"},
+  "dependencies": {"@vitejs/plugin-react": "5.1.0", "react": "19.2.0", "react-dom": "19.3.1", "typescript": "5.9.3", "vite": "7.3.7"},
+  "devDependencies": {"@axe-core/playwright": "4.11.0", "@eslint/js": "9.39.1", "@playwright/test": "1.56.1", "@types/react": "19.2.2", "@types/react-dom": "19.3.0", "eslint": "9.39.1", "eslint-plugin-jsx-a11y": "6.10.2", "typescript-eslint": "8.46.3"},
   "overrides": {"@typescript-eslint/typescript-estree": {"minimatch": "11.0.1"}}
 }
